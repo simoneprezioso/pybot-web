@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title description">
+  <title id="title">PyBot-Web</title>
+  <desc id="description">Python rules. Real-world sources. Use /web query to search. No models. No API keys.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#111c30"/>
+    </linearGradient>
+    <radialGradient id="cyanGlow">
+      <stop offset="0" stop-color="#47d9e8" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#47d9e8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="purpleGlow">
+      <stop offset="0" stop-color="#a598ff" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#a598ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="globe" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#83f1cb"/>
+      <stop offset="1" stop-color="#53cce9"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#83f1cb" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#a598ff" stop-opacity=".2"/>
+    </linearGradient>
+    <clipPath id="canvas">
+      <rect width="1280" height="360" rx="24"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#canvas)">
+    <rect width="1280" height="360" fill="url(#background)"/>
+    <ellipse cx="1118" cy="74" rx="400" ry="270" fill="url(#cyanGlow)"/>
+    <ellipse cx="976" cy="354" rx="330" ry="235" fill="url(#purpleGlow)"/>
+    <path d="M822 0V360M886 0V360M950 0V360M1014 0V360M1078 0V360M1142 0V360M1206 0V360M822 52H1280M822 116H1280M822 180H1280M822 244H1280M822 308H1280" fill="none" stroke="#86b0ce" stroke-opacity=".045"/>
+
+    <text x="64" y="132" fill="#f4f7ff" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="72" font-weight="750" letter-spacing="-2">PyBot<tspan fill="#83f1cb">-Web</tspan></text>
+    <text x="67" y="183" fill="#bac9dd" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="27" font-weight="400">Python rules. Real-world sources.</text>
+
+    <rect x="66" y="221" width="219" height="45" rx="12" fill="#102b2c" stroke="#83f1cb" stroke-opacity=".35"/>
+    <text x="86" y="251" fill="#9cf5d5" font-family="Cascadia Code, Consolas, monospace" font-size="21" font-weight="500">/web &lt;query&gt;</text>
+    <text x="67" y="310" fill="#8599b4" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="19">No models. No API keys.</text>
+
+    <rect x="876" y="58" width="322" height="244" rx="24" fill="#0e1a2c" fill-opacity=".88" stroke="url(#edge)"/>
+    <path d="M923 94H952M1122 266H1151" fill="none" stroke="#a598ff" stroke-opacity=".6" stroke-width="3" stroke-linecap="round"/>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M947 134L920 180L947 226M1127 134L1154 180L1127 226" stroke="#a598ff" stroke-width="6"/>
+      <g stroke="url(#globe)" stroke-width="2.6">
+        <circle cx="1037" cy="180" r="60" fill="#112b37"/>
+        <ellipse cx="1037" cy="180" rx="25" ry="60"/>
+        <path d="M977 180H1097M986 149Q1037 168 1088 149M986 211Q1037 192 1088 211"/>
+      </g>
+      <circle cx="1080" cy="138" r="6" fill="#83f1cb" stroke="#0e1a2c" stroke-width="4"/>
+    </g>
+    <rect x=".5" y=".5" width="1279" height="359" rx="23.5" fill="none" stroke="#34475f" stroke-opacity=".65"/>
+  </g>
+</svg>
