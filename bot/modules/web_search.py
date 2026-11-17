@@ -18,6 +18,7 @@ from ..memory.topics import in_a_safety_thread
 
 PRIORITY = 8000
 
+_WEB_COMMAND = re.compile(r"^/web(?:\s+(.*))?$", re.I)
 _EXPLICIT = re.compile(
     r"^(?:(?:please|can you|could you|would you)\s+)*"
     r"(?:search(?:\s+(?:the\s+)?(?:web|internet|online|duckduckgo))?(?:\s+for)?|"
@@ -70,8 +71,18 @@ _CAPABILITY = re.compile(
 
 
 def enabled():
-    """Installing the dependency alone never enables network access."""
+    """Enable automatic routing; /web is an explicit one-off request."""
     return os.environ.get("PYBOT_WEB_SEARCH", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _requests_disabled():
+    return os.environ.get("PYBOT_WEB_SEARCH", "").strip().lower() in ("0", "false", "no", "off")
+
+
+def _web_command(text):
+    if not isinstance(text, str):
+        return None
+    return _WEB_COMMAND.fullmatch(" ".join(text.split()))
 
 
 def _package_available():
@@ -83,14 +94,16 @@ def _package_available():
 
 def status_message():
     """Describe configuration without importing ddgs or making a request."""
+    if _requests_disabled():
+        return "Web requests are disabled by configuration. Start with --web-search to enable /web <query>."
     if not enabled():
-        return "Web search is off. Start with --web-search to enable it."
+        return "Automatic web search is off. Use /web <query> for a one-off search."
     if sys.version_info < (3, 10):
         return "Web search requires Python 3.10 or newer. Local replies are available."
     if not _package_available():
         return ('Web search is enabled, but ddgs is not installed. '
                 'Install it with python -m pip install ".[web]".')
-    return 'Web search is enabled (DuckDuckGo). Ask "search the web for ...".'
+    return "Automatic web search is enabled. Use /web <query> to search directly."
 
 
 def _capability_question(text):
@@ -116,7 +129,8 @@ def _person_lookup(asked, memory):
     # Names introduced in conversation belong to memory, not a public lookup.
     for turn in (memory or {}).get("turns", ()):
         previous = turn.get("user", "").lower()
-        if name in previous and not (_QUESTION.match(previous) or _EXPLICIT.match(previous)):
+        if name in previous and not (_QUESTION.match(previous) or _EXPLICIT.match(previous)
+                                     or _web_command(previous)):
             return False
     return True
 
@@ -131,6 +145,11 @@ def query_for(text, memory=None):
     if not isinstance(text, str) or in_a_safety_thread(memory):
         return None
     clean = " ".join(text.replace("\u2019", "'").split()).strip()
+    command = _web_command(clean)
+    if command:
+        return (command.group(1) or "").strip() or None
+    if clean.startswith("/"):
+        return None
     explicit = _EXPLICIT.match(clean)
     if explicit:
         return explicit.group(1).strip() or None
@@ -213,7 +232,13 @@ def respond(text, memory):
         # Different capability questions must not be mistaken for a repeated
         # answer and replaced by an upstream "no internet" response.
         return 'About "%s": %s' % (_excerpt(text, 160), status_message())
-    if not enabled():
+    command = _web_command(text)
+    if command:
+        if _requests_disabled():
+            return 'About "%s": %s' % (_excerpt(text, 160), status_message())
+        if not (command.group(1) or "").strip():
+            return "Usage: /web <query>. Example: /web AI news"
+    if not command and not enabled():
         return None
     query = query_for(text, memory)
     if not query or _safety_has_answer(text, memory):
@@ -225,8 +250,8 @@ def respond(text, memory):
     if response.error:
         return "Web search unavailable " + label + ": " + response.error + " I can't verify current information."
     if not response.results:
-        return ("No useful search results found " + label + ". DuckDuckGo may have no matches "
-                "or may be blocking automated requests. Try again later or use a more specific query.")
+        return ("No useful search results found " + label + ". The search providers returned no usable "
+                "matches. Try a more specific /web query or try again later.")
     excerpts = []
     for number, result in enumerate(response.results[:3], 1):
         title = _excerpt(result.title, 140)
@@ -239,7 +264,8 @@ def respond(text, memory):
 def TAKES_AS_IT_COMES(text, memory=None):
     if in_a_safety_thread(memory):
         return False
-    return _capability_question(text) or (enabled() and query_for(text, memory) is not None)
+    return (_capability_question(text) or _web_command(text) is not None
+            or (enabled() and query_for(text, memory) is not None))
 
 
 def CLAIMS_INSTEAD(text, memory=None):

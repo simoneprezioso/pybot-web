@@ -35,9 +35,10 @@ TAGLINE = "A chatbot written in plain Python. No weights, no training, just rule
 USER_PREFIX = "user: "
 BOT_PREFIX = "pybot: "
 
-HINT = "Type a message and press Enter. /reset starts a new conversation, /exit quits."
+HINT = "Type a message and press Enter. /web QUERY searches the web, /reset starts again, /exit quits."
 
 HELP = """Commands:
+  /web QUERY   search the web for QUERY (requires the web extra)
   /reset   clear the screen and start again (PyBot forgets what was said)
   /help    show this help
   /exit    quit (Ctrl+D works too)"""
@@ -178,9 +179,9 @@ def main(argv=None):
                         help="after each reply, show the module that produced it and the time it took")
     web = parser.add_mutually_exclusive_group()
     web.add_argument("--web-search", dest="web_search", action="store_true", default=None,
-                     help="enable optional DuckDuckGo search (requires the web extra)")
+                     help="enable automatic web searches (requires the web extra)")
     web.add_argument("--no-web-search", dest="web_search", action="store_false",
-                     help="disable web search, overriding PYBOT_WEB_SEARCH")
+                     help="disable all web searches, including /web, overriding PYBOT_WEB_SEARCH")
     parser.add_argument("--version", action="version",
                         version="pybot %s (bot at commit %s)" % (__version__, SOURCE_COMMIT[:12]))
     args = parser.parse_args(argv)

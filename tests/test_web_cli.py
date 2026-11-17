@@ -100,16 +100,22 @@ class WebSearchStartup(unittest.TestCase):
                 pybot.opening()
         return output.getvalue()
 
-    def test_offline_startup_explains_how_to_enable_search(self):
+    def test_default_startup_explains_manual_search_without_enabling_automatic_search(self):
         text = self.opening()
-        self.assertIn("Web search is off. Start with --web-search to enable it.", text)
+        self.assertIn("Automatic web search is off.", text)
+        self.assertIn("/web <query>", text)
         self.assertTrue(text.startswith(pybot.LOGO + "\n\n" + pybot.TAGLINE))
-        self.assertLess(text.index(pybot.HINT), text.index("Web search is off"))
+        self.assertLess(text.index(pybot.HINT), text.index("Automatic web search is off"))
 
-    def test_enabled_startup_names_duckduckgo_without_importing_the_client(self):
+    def test_enabled_startup_advertises_manual_command_without_importing_client(self):
         text = self.opening("1")
-        self.assertIn("Web search is enabled (DuckDuckGo).", text)
-        self.assertIn('search the web for ...', text)
+        self.assertIn("Automatic web search is enabled.", text)
+        self.assertIn("/web <query>", text)
+
+    def test_explicit_offline_startup_explains_web_requests_are_blocked(self):
+        text = self.opening("0")
+        self.assertIn("Web requests are disabled by configuration.", text)
+        self.assertIn("--web-search", text)
 
     def test_enabled_startup_with_missing_dependency_explains_installation(self):
         text = self.opening("1", available=False)
@@ -126,7 +132,7 @@ class WebSearchStartup(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(output):
             self.assertEqual(pybot.main(["--web-search"]), 0)
             self.assertNotIn("PYBOT_WEB_SEARCH", os.environ)
-        self.assertIn("Web search is enabled (DuckDuckGo).", output.getvalue())
+        self.assertIn("Automatic web search is enabled.", output.getvalue())
 
     def test_terminal_reset_shows_the_current_search_status_again(self):
         class Terminal(io.StringIO):
@@ -142,7 +148,20 @@ class WebSearchStartup(unittest.TestCase):
                 contextlib.redirect_stdout(output):
             pybot.chat(object(), args)
         clear_screen.assert_called_once()
-        self.assertEqual(output.getvalue().count("Web search is enabled (DuckDuckGo)."), 2)
+        self.assertEqual(output.getvalue().count("Automatic web search is enabled."), 2)
+
+    def test_help_advertises_web_and_web_queries_reach_the_runtime_unchanged(self):
+        output = io.StringIO()
+        args = argparse.Namespace(prompt=None, seed=None, verbose=False)
+        runtime = mock.Mock()
+        runtime.turn.return_value = {"reply": "search excerpts", "module": "web_search"}
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch("builtins.input", side_effect=["/help", "/web pancake recipe", "/exit"]), \
+                contextlib.redirect_stdout(output):
+            pybot.chat(runtime, args)
+        self.assertIn("/web QUERY", output.getvalue())
+        runtime.turn.assert_called_once_with("/web pancake recipe", {})
+        self.assertIn("pybot: search excerpts", output.getvalue())
 
     def test_one_shot_reply_has_no_startup_status(self):
         runtime = mock.Mock()
@@ -152,8 +171,9 @@ class WebSearchStartup(unittest.TestCase):
                 mock.patch.object(pybot, "load_bot", return_value=runtime), \
                 mock.patch.object(pybot, "opening") as opening, \
                 contextlib.redirect_stdout(output):
-            self.assertEqual(pybot.main(["--web-search", "-p", "current news"]), 0)
+            self.assertEqual(pybot.main(["-p", "/web AI news"]), 0)
         opening.assert_not_called()
+        runtime.turn.assert_called_once_with("/web AI news", {})
         self.assertEqual(output.getvalue(), "result\n")
 
 

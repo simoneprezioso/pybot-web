@@ -1,6 +1,8 @@
 """Tests of the optional transport; all external search calls are mocked."""
 import itertools
 import math
+import sys
+import types
 import unittest
 from unittest import mock
 
@@ -16,6 +18,9 @@ class SearchTransport(unittest.TestCase):
         self.loader = mock.patch("bot.search._load_ddgs")
         self.factory = self.loader.start().return_value
         self.addCleanup(self.loader.stop)
+        self.registry = mock.patch("bot.search._available_backends", return_value=frozenset(transport.BACKENDS))
+        self.available = self.registry.start()
+        self.addCleanup(self.registry.stop)
         self.client = self.factory.return_value
         self.client.text.return_value = [row()]
 
@@ -28,6 +33,71 @@ class SearchTransport(unittest.TestCase):
         self.assertEqual(response.results, (
             transport.SearchResult("Microsoft leadership", "https://example.org/leadership", "A search excerpt."),))
         self.assertIsNone(response.error)
+
+    def test_empty_duckduckgo_results_use_yahoo_and_stop_on_success(self):
+        self.client.text.side_effect = [[], [row()], AssertionError("Startpage should not be called")]
+        response = transport.search("pancake recipe", timeout=5, timelimit="w")
+        self.assertEqual(len(response.results), 1)
+        self.assertIsNone(response.error)
+        self.assertEqual(self.client.text.call_args_list, [
+            mock.call("pancake recipe", max_results=3, backend="duckduckgo", timelimit="w"),
+            mock.call("pancake recipe", max_results=3, backend="yahoo", timelimit="w"),
+        ])
+        self.assertEqual(self.factory.call_args_list, [mock.call(timeout=5)] * 2)
+
+    def test_failed_and_malformed_providers_fall_back_to_startpage(self):
+        self.client.text.side_effect = [ConnectionError("secret"), [row(href="javascript:bad")], [row()]]
+        response = transport.search("AI news today")
+        self.assertEqual(len(response.results), 1)
+        self.assertIsNone(response.error)
+        self.assertEqual([call.kwargs["backend"] for call in self.client.text.call_args_list],
+                         ["duckduckgo", "yahoo", "startpage"])
+
+    def test_ddgs_empty_exception_falls_back(self):
+        empty = type("DDGSException", (Exception,), {})("No results found.")
+        self.client.text.side_effect = [empty, [row()]]
+        self.assertEqual(len(transport.search("news").results), 1)
+        self.assertEqual(self.client.text.call_count, 2)
+
+    def test_all_empty_providers_are_bounded_without_retries(self):
+        self.client.text.return_value = []
+        self.assertEqual(transport.search("news"), transport.SearchResponse())
+        self.assertEqual(self.client.text.call_count, 3)
+        self.assertEqual([call.kwargs["backend"] for call in self.client.text.call_args_list],
+                         ["duckduckgo", "yahoo", "startpage"])
+
+    def test_unregistered_or_disabled_provider_cannot_trigger_ddgs_auto(self):
+        self.available.return_value = frozenset(("duckduckgo", "startpage", "grokipedia"))
+        self.client.text.side_effect = [[], [row()]]
+        with mock.patch("bot.search.BACKENDS", ("duckduckgo", "yahoo", "google", "unknown", "startpage")):
+            response = transport.search("news")
+        self.assertEqual(len(response.results), 1)
+        self.assertEqual([call.kwargs["backend"] for call in self.client.text.call_args_list],
+                         ["duckduckgo", "startpage"])
+
+    def test_no_registered_allowlisted_provider_makes_no_network_calls(self):
+        self.available.return_value = frozenset(("grokipedia",))
+        response = transport.search("news")
+        self.assertIn("No supported", response.error)
+        self.factory.assert_not_called()
+
+    def test_registry_failure_fails_closed_without_network(self):
+        self.available.side_effect = ImportError("secret")
+        response = transport.search("news")
+        self.assertIn("could not be checked", response.error)
+        self.factory.assert_not_called()
+
+    def test_engine_registry_filters_disabled_classes(self):
+        module = types.ModuleType("ddgs.engines")
+        module.ENGINES = {"text": {
+            "duckduckgo": type("Duckduckgo", (), {"disabled": False}),
+            "google": type("Google", (), {"disabled": True}),
+            "unknown": type("Unknown", (), {}),
+        }}
+        # Call the real helper without loading any optional package.
+        self.registry.stop()
+        with mock.patch.dict(sys.modules, {"ddgs.engines": module}):
+            self.assertEqual(transport._available_backends(), frozenset(("duckduckgo",)))
 
     def test_clean_html_whitespace_controls_and_bound_text(self):
         self.client.text.return_value = [row(

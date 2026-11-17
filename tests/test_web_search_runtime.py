@@ -151,6 +151,91 @@ class WebSearchRuntime(unittest.TestCase):
         self.assertIn("https://www.microsoft.com/en-us/leadership", result["reply"])
         self.search.assert_called_once()
 
+    def test_manual_web_command_searches_with_automatic_search_off_by_default(self):
+        os.environ.pop("PYBOT_WEB_SEARCH", None)
+        self.search.return_value = search.SearchResponse(results=(
+            search.SearchResult("Pancake recipe", "https://example.org/pancakes",
+                                "Mix the ingredients and cook the pancakes in a pan."),
+        ))
+        memory = {}
+        result = runtime.turn("/web pancake recipe", memory)
+
+        self.assertEqual(result["module"], "web_search")
+        self.assertIn("Pancake recipe", result["reply"])
+        self.assertIn("https://example.org/pancakes", result["reply"])
+        self.search.assert_called_once()
+        self.assertEqual(self.search.call_args.args[0], "pancake recipe")
+        self.assertNotIn("PYBOT_WEB_SEARCH", os.environ)
+        self.assertEqual(memory["turns"][-1]["user"], "/web pancake recipe")
+
+        self.search.reset_mock()
+        result = runtime.turn("Who is the current CEO of Microsoft?", memory)
+        self.assertNotEqual(result["module"], "web_search")
+        self.search.assert_not_called()
+
+    def test_manual_web_command_strips_prefix_when_automatic_search_is_enabled(self):
+        result = runtime.turn("/web AI news", {})
+
+        self.assertEqual(result["module"], "web_search")
+        self.assertIn("https://www.microsoft.com/en-us/leadership", result["reply"])
+        self.search.assert_called_once()
+        self.assertEqual(self.search.call_args.args[0], "AI news")
+
+    def test_manual_web_without_query_shows_usage_without_searching(self):
+        for value in (None, "1"):
+            with self.subTest(value=value):
+                if value is None:
+                    os.environ.pop("PYBOT_WEB_SEARCH", None)
+                else:
+                    os.environ["PYBOT_WEB_SEARCH"] = value
+                result = runtime.turn("/web", {})
+                self.assertEqual(result["module"], "web_search")
+                self.assertIn("/web", result["reply"])
+                self.assertRegex(result["reply"].lower(), r"query|search term|usage")
+        self.search.assert_not_called()
+
+    def test_explicit_off_setting_blocks_manual_web_with_helpful_response(self):
+        for value in ("0", "false", "no", "off"):
+            with self.subTest(value=value):
+                os.environ["PYBOT_WEB_SEARCH"] = value
+                result = runtime.turn("/web pancake recipe", {})
+                self.assertEqual(result["module"], "web_search")
+                self.assertIn("disabled", result["reply"].lower())
+                self.assertIn("--web-search", result["reply"])
+        self.search.assert_not_called()
+
+    def test_similar_slash_commands_are_not_manual_searches(self):
+        for value in (None, "1"):
+            if value is None:
+                os.environ.pop("PYBOT_WEB_SEARCH", None)
+            else:
+                os.environ["PYBOT_WEB_SEARCH"] = value
+            for text in ("/website AI news", "/webbing AI news", "/webbing pancake recipe"):
+                with self.subTest(value=value, text=text):
+                    result = runtime.turn(text, {})
+                    self.assertNotEqual(result["module"], "web_search")
+        self.search.assert_not_called()
+
+    def test_default_capability_response_explains_manual_web_command(self):
+        os.environ.pop("PYBOT_WEB_SEARCH", None)
+        with mock.patch.object(web_search, "_package_available", return_value=True):
+            result = runtime.turn("can you web search?", {})
+
+        self.assertEqual(result["module"], "web_search")
+        self.assertIn("/web", result["reply"])
+        self.search.assert_not_called()
+
+    def test_emergency_in_manual_web_query_keeps_safety_without_network_io(self):
+        for value in (None, "1"):
+            with self.subTest(value=value):
+                if value is None:
+                    os.environ.pop("PYBOT_WEB_SEARCH", None)
+                else:
+                    os.environ["PYBOT_WEB_SEARCH"] = value
+                result = runtime.turn("/web latest news; A baby cannot breathe", {})
+                self.assertEqual(result["module"], "safety")
+        self.search.assert_not_called()
+
     def test_equal_results_for_different_queries_keep_search_precedence(self):
         for response in (self.search.return_value, search.SearchResponse(),
                          search.SearchResponse(error="unavailable")):

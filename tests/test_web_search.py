@@ -68,6 +68,43 @@ class WebSearchRules(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(web_search.query_for(text), "how to make pancakes")
 
+    def test_manual_web_query_is_parsed_independently_of_automatic_configuration(self):
+        for value in (None, "1", "0"):
+            with mock.patch.dict(os.environ, {}):
+                if value is None:
+                    os.environ.pop("PYBOT_WEB_SEARCH", None)
+                else:
+                    os.environ["PYBOT_WEB_SEARCH"] = value
+                for text, expected in (
+                    ("/web AI news", "AI news"),
+                    ("/web pancake recipe", "pancake recipe"),
+                    ("/web   how to make pancakes  ", "how to make pancakes"),
+                ):
+                    with self.subTest(value=value, text=text):
+                        self.assertEqual(web_search.query_for(text), expected)
+
+    def test_manual_web_requires_an_exact_command_and_nonempty_query(self):
+        for text in ("/web", "/web   ", "/webbing AI news", "/website AI news"):
+            with self.subTest(text=text):
+                self.assertIsNone(web_search.query_for(text))
+
+    def test_manual_web_arbiter_hooks_do_not_perform_io(self):
+        with mock.patch.dict(os.environ, {}), mock.patch.object(search, "search") as lookup:
+            os.environ.pop("PYBOT_WEB_SEARCH", None)
+            for text in ("/web AI news", "/web"):
+                with self.subTest(text=text):
+                    self.assertTrue(web_search.TAKES_AS_IT_COMES(text, {}))
+                    self.assertTrue(web_search.CLAIMS_INSTEAD(text, {}))
+            lookup.assert_not_called()
+
+    def test_existing_safety_thread_blocks_manual_web_without_io(self):
+        memory = {"turns": [{"module": "safety", "bot": "Emergency response"}]}
+        with mock.patch.dict(os.environ, {}), mock.patch.object(search, "search") as lookup:
+            os.environ.pop("PYBOT_WEB_SEARCH", None)
+            self.assertIsNone(web_search.query_for("/web AI news", memory))
+            self.assertIsNone(web_search.respond("/web AI news", memory))
+            lookup.assert_not_called()
+
     def test_environment_opt_in_is_explicit(self):
         for value in ("1", "true", "TRUE", "yes", "on", " 1 "):
             with self.subTest(value=value), mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": value}):
@@ -79,7 +116,7 @@ class WebSearchRules(unittest.TestCase):
     def test_status_does_not_probe_package_when_disabled(self):
         with mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": "0"}), \
                 mock.patch.object(web_search, "_package_available") as available:
-            self.assertIn("off", web_search.status_message())
+            self.assertRegex(web_search.status_message(), r"off|disabled")
             available.assert_not_called()
 
     def test_search_request_is_not_mistaken_for_a_capability_question(self):

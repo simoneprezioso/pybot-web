@@ -1,129 +1,105 @@
 # PyBot-Web
 
-**A rule-based Python chatbot with optional DuckDuckGo web search.**
+**A rule-based Python chatbot with on-demand web search.**
 
-PyBot-Web extends [Hugging Face's PyBot](https://github.com/huggingface/pybot) so it can look up current public information and include search snippets and source links in its replies. It keeps PyBot's original approach: Python rules, regular expressions, lookup tables, and conversation memory. No LLM inference, neural networks, model downloads, or model APIs are added.
+PyBot-Web extends [Hugging Face's PyBot](https://github.com/huggingface/pybot) with internet search through [`ddgs`](https://github.com/deedy5/ddgs). It keeps the original Python rules, regular expressions, lookup tables, and conversation memory. No LLM inference, neural networks, model downloads, or model APIs are added.
 
-Web search is **off by default**. The bot still works locally without the optional search dependency or an internet connection.
+Type **`/web <query>`** to search. Automatic searches are off by default, so ordinary conversation stays local unless you explicitly request a search or enable automatic routing.
 
 ## What's new
 
-- **Optional internet access through `ddgs`.** Searches use the DuckDuckGo backend, with no API key required.
-- **Automatic search routing.** Rules recognize supported questions about current company leaders, news, weather, market prices, and software releases. Named-person questions can search when the local knowledge base has no answer.
-- **Explicit searches.** Ask "search the web for ...", "search for ...", or "look up ..." to search other topics.
-- **Readable, attributed results.** Replies show up to three result titles, short snippets, and source URLs. Snippets are labeled as unverified excerpts.
+- **A short search command.** `/web AI news`, `/web pancake recipe`, and `/web what to do in Rome` retrieve titles, snippets, and source links. `/web` by itself shows usage without making a request.
+- **DuckDuckGo-first search with fallbacks.** The `ddgs` adapter tries available providers in order: DuckDuckGo, Yahoo, then Startpage. It moves on when a provider fails or returns no usable results. No API keys are required.
+- **Optional automatic routing.** With `--web-search`, rules recognize supported current-information questions about company leaders, news, weather, market prices, and software releases. Named-person questions can search when local knowledge has no answer.
+- **Readable, attributed excerpts.** Replies show up to three result titles, short snippets, and source URLs, labeled as unverified excerpts.
 - **Graceful failures.** Missing dependencies, connection failures, timeouts, and empty results produce an explanation instead of breaking the conversation.
-- **Existing local responses.** Arithmetic, date calculations, cooking advice, greetings, and conversation recall stay with PyBot's existing modules. Emergency responses and ongoing safety threads stay local.
-- **CLI controls and mocked tests.** Enable search with `--web-search` or `PYBOT_WEB_SEARCH`; force it off with `--no-web-search`. Automated tests cover the adapter, routing, response pipeline, and CLI without making external search calls.
+- **Existing local behavior.** Arithmetic, date calculations, cooking advice, greetings, and conversation recall continue to use PyBot's existing modules. Emergency responses and ongoing safety threads stay local.
 
 The original runtime and arbiter are unchanged. The Python module and command names remain `pybot` for compatibility.
 
 ## Quick start
 
-To use internet search, install this fork and its optional dependency with **Python 3.10 or newer**, then start it with `--web-search`:
+Use **Python 3.10 or newer** for internet search:
 
 ```sh
 git clone https://github.com/simoneprezioso/pybot-web.git
 cd pybot-web
 python -m pip install ".[web]"
-python -m pybot --web-search
+python -m pybot
 ```
 
-For an existing clone, run these commands from its `pybot-web` folder to update and enable search:
+Then enter a search command in the chat:
+
+```text
+user: /web AI news
+user: /web pancake recipe
+user: /web what to do in Rome
+```
+
+These are example requests, not captured live search results. The reply contains short search excerpts and source links when a provider returns usable results.
+
+For an existing clone, run these commands from its `pybot-web` folder:
 
 ```sh
 git pull --ff-only
 python -m pip install ".[web]"
-python -m pybot --web-search
+python -m pybot
 ```
 
-The interactive startup reports whether search is off, enabled, or missing `ddgs`. An enabled status describes the configuration; it does not guarantee that the search service is reachable. Try `search the web for Python release notes` to make a search request.
-
-For **offline chat**, use `python -m pybot --no-web-search`. Python 3.8 or newer is supported without third-party packages. Running just `python -m pybot` also leaves search off unless `PYBOT_WEB_SEARCH` enables it. Neither mode downloads or runs a model.
-
-The existing PyBot logo and `pybot` commands are retained for compatibility. An offline session looks like this:
+The interactive startup shows the search configuration. By default it says:
 
 ```text
-    ____        ____        __
-   / __ \__  __/ __ )____  / /_
-  / /_/ / / / / __  / __ \/ __/
- / ____/ /_/ / /_/ / /_/ / /_
-/_/    \__, /_____/\____/\__/
-      /____/
-
-A chatbot written in plain Python. No weights, no training, just rules.
-Type a message and press Enter. /reset starts a new conversation, /exit quits.
-
-Web search is off. Start with --web-search to enable it.
-
-user: hi, i'm Sam
-pybot: Nice to meet you, Sam. What can I help with?
-
-user: my kettle is full of limescale, how do i get rid of it?
-pybot: Half fill the kettle with equal parts water and white vinegar, or a sachet of citric acid, boil it and leave it half an hour, then tip it out and boil fresh water twice before you use it again. In a hard-water area do it every couple of months: the scale forms because hard water leaves calcium behind as it boils, and a thick layer makes the kettle slow and puts a scum on the tea.
-
-user: how long does that take
-pybot: Half an hour.
-
-user: what's my name?
-pybot: You're Sam.
+Automatic web search is off. Use /web <query> for a one-off search.
 ```
 
-Type `/reset` to clear the screen and start a new conversation, `/help` for commands, and `/exit` to quit. PyBot-Web takes a few seconds to load the original rule modules. Search requests add network latency when enabled.
+`/web` is an explicit request to send that query to the search service. Installing the dependency alone does not cause ordinary messages to be sent. If it is missing, a search request explains how to install it.
 
-To ask one question and exit, or to pipe messages in and get one reply per line:
+## Search commands and CLI
 
-```sh
-python -m pybot -p "Why do onions make you cry?"
-echo "how long should i boil an egg" | python -m pybot
-```
-
-| Option | What it does |
+| Command | What it does |
 |---|---|
-| `-p TEXT`, `--prompt TEXT` | reply to this one message and exit |
-| `-i`, `--interactive` | with `-p`, keep chatting after the first reply |
-| `-s N`, `--seed N` | seed local wording choices; live search results can still change |
-| `-v`, `--verbose` | after each reply, show the module that produced it and the time it took |
-| `--web-search` | enable optional DuckDuckGo search for this invocation |
-| `--no-web-search` | disable search even when `PYBOT_WEB_SEARCH` enables it |
+| `/web QUERY` | search for any natural-language query |
+| `/web` | show search usage without making a request |
+| `/reset` | clear the terminal and start a new conversation |
+| `/help` | show the available chat commands |
+| `/exit` | quit |
 
-For a `pybot` command you can run from anywhere, install the clone with `pip install .`.
-
-## Optional internet search
-
-Search is off by default. Install the extra from this repository using Python 3.10 or newer:
+You can also search once and exit, or send a search through piped input:
 
 ```sh
-python -m pip install ".[web]"
-python -m pybot --web-search -p "Who is the current CEO of Microsoft?"
-python -m pybot --web-search -p "What happened in AI news today?"
-python -m pybot --web-search -p "What's going on in AI today?"
-python -m pybot --web-search -p "Who is Elon Musk?"
-python -m pybot --web-search -p "Search the web for Python release notes"
+python -m pybot -p "/web AI news today"
+echo "/web pancake recipe" | python -m pybot
 ```
 
-For an interactive chat with search enabled:
+One-shot and piped modes print only replies. Interactive startup status is displayed again after `/reset` in a terminal. The existing PyBot logo is retained.
+
+| CLI option | What it does |
+|---|---|
+| `-p TEXT`, `--prompt TEXT` | reply to one message and exit |
+| `-i`, `--interactive` | with `-p`, keep chatting after the first reply |
+| `-s N`, `--seed N` | seed local wording choices; live results can still change |
+| `-v`, `--verbose` | show the module and elapsed time after each reply |
+| `--web-search` | enable automatic searches for supported questions |
+| `--no-web-search` | disable all web requests, including `/web` |
+
+For a `pybot` command available from other directories, install the clone with `python -m pip install ".[web]"`.
+
+## Optional automatic search
+
+Start with `--web-search` if you want supported current-information questions to search without typing `/web`:
 
 ```sh
 python -m pybot --web-search
+python -m pybot --web-search -p "Who is the current CEO of Microsoft?"
+python -m pybot --web-search -p "What's going on in AI today?"
+python -m pybot --web-search -p "Who is Elon Musk?"
 ```
 
-The startup status will say `Web search is enabled (DuckDuckGo).` when the optional dependency is available. If `ddgs` is missing, it shows the installation command instead. Startup status is displayed again after `/reset` in a terminal; one-shot and piped modes still print only replies.
+The startup will say `Automatic web search is enabled.` when the dependency is available. Enabled status describes configuration, not proof that a provider is reachable. You can ask `Can you search the internet?` to check configuration without making a search request.
 
-You can also ask about the current configuration without sending a search query:
+Automatic routing uses deliberately narrow rules. Arithmetic ("What is 2 + 2?"), date calculations, ordinary cooking advice, greetings, and conversation recall stay local. Use `/web` to search other topics explicitly, including topics the bot could answer locally. Older phrases such as "search the web for ...", "search for ...", and "look up ..." remain supported when automatic search is enabled.
 
-```sh
-python -m pybot --web-search -p "Can you search the internet?"
-python -m pybot --no-web-search -p "Can you search the internet?"
-```
-
-The first reports the enabled status or a missing dependency; the second explains how to enable search. To retrieve results, ask a supported current-information question or use an explicit search request.
-
-Even with search enabled, `python -m pybot --web-search -p "What is 2 + 2?"` uses the existing local calculator and makes no search request.
-
-Installing `ddgs` directly (`python -m pip install "ddgs>=9,<10"`) also works. The offline package still supports Python 3.8 and 3.9; those versions do not install `ddgs` through the extra and cannot use web search.
-
-You can also enable search through the environment, including when using `python -m bot` or `bot.runtime.reply`:
+You can enable automatic search through the environment, including with `python -m bot` or `bot.runtime.reply`:
 
 ```sh
 export PYBOT_WEB_SEARCH=1
@@ -137,64 +113,67 @@ $env:PYBOT_WEB_SEARCH = "1"
 python -m pybot
 ```
 
-Use `--no-web-search` to override that environment setting for one invocation. With search disabled, no queries are sent and `ddgs` is not imported. The CLI flags apply only to the current invocation and restore the previous environment setting when `main()` returns.
+Values `1`, `true`, `yes`, and `on` enable automatic search, ignoring case. With the variable unset or empty, automatic search is off and `/web` remains available. Values `0`, `false`, `no`, and `off` explicitly block all web requests, including `/web`. CLI flags override the environment for the current invocation and restore the previous value when `main()` returns.
 
-Accepted enabled environment values are `1`, `true`, `yes`, and `on`, ignoring case. Other values disable search.
+## Offline use and requirements
 
-The search module uses deterministic rules to recognize public information that can change, such as company leaders, recent news, weather, and software releases. It also recognizes requests such as "What's going on in AI today?" and named-person questions without a matching local knowledge answer. An explicit request such as "search the web for ..." triggers search for other topics. Arithmetic ("What is 2 + 2?"), date calculations, ordinary cooking advice, greetings, and questions about the conversation keep their existing local responses. These rules deliberately cover a limited set of question forms; use an explicit web-search request for other topics.
+For fully offline chat, run:
 
-Responses present a short list of titles, excerpts from search snippets, and source URLs. They label these as search results rather than verified facts: snippets can be stale, incomplete, or contradictory. PyBot does not infer an unsupported answer, verify page contents, or use an LLM to summarize them. Check the linked sources for confirmation, especially for current information.
+```sh
+python -m pybot --no-web-search
+```
 
-For example, this is an **illustrative format**, not a live search result:
+This also blocks `/web` requests and overrides an enabled environment setting. No queries are sent and `ddgs` is not imported.
+
+Offline PyBot supports Python 3.8 or newer without third-party packages. The optional web feature needs Python 3.10 or newer and `ddgs>=9,<10`; the `web` extra installs it only on supported Python versions. Installing that package directly also works:
+
+```sh
+python -m pip install "ddgs>=9,<10"
+```
+
+## Results, providers, and limitations
+
+Responses present titles, excerpts from search snippets, and source URLs. Snippets can be stale, incomplete, or contradictory. PyBot-Web labels them as unverified search results, does not verify page contents, and does not infer an unsupported answer or use an LLM to summarize them. Check linked sources for confirmation.
+
+This is an **illustrative format**, not a live search result:
 
 ```text
 Search results for "example query" (snippets, not independently verified): [1] Example title: An excerpt from the search result. Source: https://example.org/page
 ```
 
-The adapter lazily imports [`ddgs`](https://github.com/deedy5/ddgs), explicitly selects its `duckduckgo` backend, and requests at most three results with a five-second client timeout. That timeout is not a guaranteed deadline for the entire chatbot turn. The adapter adds no retry loop. Missing dependencies, timeouts, network failures, and empty results produce a short explanation instead of breaking the conversation. The library is unofficial and free to use without an API key; DuckDuckGo may throttle, block, or return no results, so successful retrieval is not guaranteed. An empty response can mean there were no matches or that automated requests were blocked. PyBot-Web reports this uncertainty instead of inventing an answer. Enabling search sends eligible query text to the search service.
+The adapter tries at most three providers in order: **DuckDuckGo -> Yahoo -> Startpage**, stopping at the first one with usable, cleaned results. Unavailable or disabled providers are skipped. It checks the installed `ddgs` provider registry before requesting a search; if that check fails, it sends no requests. It never switches to the library's unrestricted automatic provider selection. Each available provider is attempted at most once per search, with a five-second HTTP-client timeout. The total turn can take longer than five seconds, and those client timeouts are not a guaranteed whole-turn deadline. A freshness filter is applied to queries such as "today" when supported by the provider.
+
+This is an unofficial integration. Provider availability varies with the installed library, and providers can throttle, block automated requests, or return empty results. PyBot-Web does not bypass CAPTCHAs. If no provider returns usable results, it reports the failure instead of inventing an answer. A manual `/web` request or an eligible automatically routed message may send its query text to the available DuckDuckGo, Yahoo, and Startpage providers in that order.
 
 ## Testing
 
-Run the existing CLI tests and the new mocked search tests with:
+Run the CLI, adapter, routing, and response-pipeline tests with:
 
 ```sh
 python -m unittest discover -s tests
 ```
 
-Automated search tests replace external calls and require neither internet access nor `ddgs`.
+Automated search tests mock external calls and require neither internet access nor `ddgs`. They cover current-information questions, explicit searches, local responses, dependency failures, network failures, timeouts, empty results, source formatting, safety precedence, conversation memory, and CLI configuration.
 
-Coverage includes current-information questions, explicit requests, local questions that must not search, missing dependencies, network failures, timeouts, empty results, source formatting, safety precedence, conversation memory, and CLI configuration.
+## Architecture
 
-## What is in this repository
+`bot/runtime.py` automatically discovers modules in `bot/modules/`. Each turn runs shared `observe` hooks, then gathers `respond` proposals on isolated memory copies. The arbiter chooses a reply and its memory copy. Finally, `after` hooks run and the runtime records the turn.
 
-| Path | What it holds |
+| Path | Responsibility |
 |---|---|
-| `bot/` | PyBot's original rule-based modules, plus the optional search adapter and module |
-| `bot/search.py` | optional `ddgs` adapter, result cleanup, and error handling |
-| `bot/modules/web_search.py` | rule-based search routing, safety checks, and excerpt formatting |
-| `pybot.py` | the command line shown above. It contains no chatbot logic |
-| `tests/` | CLI, search adapter, and response-pipeline tests |
-| `assets/` | the banner and the chart |
+| `bot/modules/web_search.py` | `/web`, configuration, rule-based routing, safety checks, and excerpt formatting |
+| `bot/search.py` | optional `ddgs` adapter, provider fallbacks, result cleanup, and error handling |
+| `bot/modules/answers.py` | existing calculations and knowledge-base answers |
+| `bot/understanding/` | input normalization, topics, and references |
+| `bot/memory/` | conversation memory |
+| `bot/knowledge/` | local facts and calculations |
+| `bot/compose/` | rule-based response wording |
+| `pybot.py` | CLI and interactive chat |
 
-Every turn, each module in `bot/modules/` may propose a reply, and an arbiter (`bot/modules/arbiter.py`) picks the one you get. The modules build on four shared parts:
-
-| Part | Where | Lines |
-|---|---|---:|
-| Understanding engine: what you typed and meant, with typos, chat-speak, the topic and what "it" refers to | `bot/understanding/` | 25,000 |
-| Memory store: what you and PyBot have said so far | `bot/memory/` | 109,000 |
-| Knowledge base: facts about the world, kept as data | `bot/knowledge/` | 317,000 |
-| Response composer: how a reply is phrased, and what to say when nothing fits | `bot/compose/` | 104,000 |
-
-The modules themselves are another 81,000 lines.
-
-### How search fits the existing architecture
-
-`bot/runtime.py` discovers modules automatically and runs four phases for each input. First, `observe(text, memory)` hooks update the shared understanding and memory. Then, `respond(text, memory)` hooks propose replies using separate memory copies. The arbiter selects a candidate, whose memory copy becomes the conversation's memory. Finally, `after(text, reply, memory)` hooks run and the runtime records the turn.
-
-`bot/modules/answers.py` already answers calculations and knowledge-base questions. The new `bot/modules/web_search.py` participates in the same proposal system and delegates external access to `bot/search.py`. Its narrow routing rules and existing arbiter claim hooks give eligible current-information questions a search response. The hooks only inspect the query and configuration; they never perform network requests. Its priority is below the existing safety band. Before network access, it also checks existing emergency rules on an isolated memory copy, preserving random state, so emergency replies do not wait for a search. Existing safety threads stay local. The runtime and arbiter require no changes, and all parsing, selection, and response formatting remain ordinary Python rules.
+The search module uses existing arbiter claim hooks and a priority below the safety band. The hooks inspect queries and configuration without making network requests. Before network access, existing emergency rules are checked on an isolated memory copy while preserving random state; ongoing safety threads stay local. No runtime or arbiter changes are required.
 
 ## Credits and license
 
-The original rule-based chatbot was created by [Hugging Face's PyBot project](https://github.com/huggingface/pybot). This fork adds optional web search and its integration, configuration, documentation, and tests. The [upstream Hugging Face demo](https://huggingface.co/spaces/HuggingFaceSwarms/PyBot) demonstrates the original PyBot, not this fork's search feature.
+The original chatbot was created by [Hugging Face's PyBot project](https://github.com/huggingface/pybot). This fork adds optional web search and its integration, configuration, documentation, and tests. The [upstream Hugging Face demo](https://huggingface.co/spaces/HuggingFaceSwarms/PyBot) demonstrates the original PyBot, not this fork's search feature.
 
 Apache License 2.0. See [LICENSE](LICENSE).
