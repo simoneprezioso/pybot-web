@@ -9,7 +9,7 @@ Web search is **off by default**. The bot still works locally without the option
 ## What's new
 
 - **Optional internet access through `ddgs`.** Searches use the DuckDuckGo backend, with no API key required.
-- **Automatic search routing.** Rules recognize supported questions about current company leaders, news, weather, market prices, and software releases.
+- **Automatic search routing.** Rules recognize supported questions about current company leaders, news, weather, market prices, and software releases. Named-person questions can search when the local knowledge base has no answer.
 - **Explicit searches.** Ask "search the web for ...", "search for ...", or "look up ..." to search other topics.
 - **Readable, attributed results.** Replies show up to three result titles, short snippets, and source URLs. Snippets are labeled as unverified excerpts.
 - **Graceful failures.** Missing dependencies, connection failures, timeouts, and empty results produce an explanation instead of breaking the conversation.
@@ -20,17 +20,28 @@ The original runtime and arbiter are unchanged. The Python module and command na
 
 ## Quick start
 
-Clone this fork and run it locally:
-
-Offline PyBot needs Python 3.8 or newer and no third-party packages. Optional web search needs Python 3.10 or newer and the `ddgs` package. Neither mode downloads or runs a model.
+To use internet search, install this fork and its optional dependency with **Python 3.10 or newer**, then start it with `--web-search`:
 
 ```sh
 git clone https://github.com/simoneprezioso/pybot-web.git
 cd pybot-web
-python -m pybot
+python -m pip install ".[web]"
+python -m pybot --web-search
 ```
 
-That starts a chat in your terminal. The existing PyBot logo and `pybot` commands are retained for compatibility:
+For an existing clone, run these commands from its `pybot-web` folder to update and enable search:
+
+```sh
+git pull --ff-only
+python -m pip install ".[web]"
+python -m pybot --web-search
+```
+
+The interactive startup reports whether search is off, enabled, or missing `ddgs`. An enabled status describes the configuration; it does not guarantee that the search service is reachable. Try `search the web for Python release notes` to make a search request.
+
+For **offline chat**, use `python -m pybot --no-web-search`. Python 3.8 or newer is supported without third-party packages. Running just `python -m pybot` also leaves search off unless `PYBOT_WEB_SEARCH` enables it. Neither mode downloads or runs a model.
+
+The existing PyBot logo and `pybot` commands are retained for compatibility. An offline session looks like this:
 
 ```text
     ____        ____        __
@@ -42,6 +53,8 @@ That starts a chat in your terminal. The existing PyBot logo and `pybot` command
 
 A chatbot written in plain Python. No weights, no training, just rules.
 Type a message and press Enter. /reset starts a new conversation, /exit quits.
+
+Web search is off. Start with --web-search to enable it.
 
 user: hi, i'm Sam
 pybot: Nice to meet you, Sam. What can I help with?
@@ -84,6 +97,8 @@ Search is off by default. Install the extra from this repository using Python 3.
 python -m pip install ".[web]"
 python -m pybot --web-search -p "Who is the current CEO of Microsoft?"
 python -m pybot --web-search -p "What happened in AI news today?"
+python -m pybot --web-search -p "What's going on in AI today?"
+python -m pybot --web-search -p "Who is Elon Musk?"
 python -m pybot --web-search -p "Search the web for Python release notes"
 ```
 
@@ -92,6 +107,17 @@ For an interactive chat with search enabled:
 ```sh
 python -m pybot --web-search
 ```
+
+The startup status will say `Web search is enabled (DuckDuckGo).` when the optional dependency is available. If `ddgs` is missing, it shows the installation command instead. Startup status is displayed again after `/reset` in a terminal; one-shot and piped modes still print only replies.
+
+You can also ask about the current configuration without sending a search query:
+
+```sh
+python -m pybot --web-search -p "Can you search the internet?"
+python -m pybot --no-web-search -p "Can you search the internet?"
+```
+
+The first reports the enabled status or a missing dependency; the second explains how to enable search. To retrieve results, ask a supported current-information question or use an explicit search request.
 
 Even with search enabled, `python -m pybot --web-search -p "What is 2 + 2?"` uses the existing local calculator and makes no search request.
 
@@ -115,7 +141,7 @@ Use `--no-web-search` to override that environment setting for one invocation. W
 
 Accepted enabled environment values are `1`, `true`, `yes`, and `on`, ignoring case. Other values disable search.
 
-The search module uses deterministic rules to recognize public information that can change, such as company leaders, recent news, weather, and software releases. An explicit request such as "search the web for ..." also triggers search. Arithmetic ("What is 2 + 2?"), date calculations, ordinary cooking advice, greetings, and questions about the conversation keep their existing local responses. These rules deliberately cover a limited set of question forms; use an explicit web-search request for other topics.
+The search module uses deterministic rules to recognize public information that can change, such as company leaders, recent news, weather, and software releases. It also recognizes requests such as "What's going on in AI today?" and named-person questions without a matching local knowledge answer. An explicit request such as "search the web for ..." triggers search for other topics. Arithmetic ("What is 2 + 2?"), date calculations, ordinary cooking advice, greetings, and questions about the conversation keep their existing local responses. These rules deliberately cover a limited set of question forms; use an explicit web-search request for other topics.
 
 Responses present a short list of titles, excerpts from search snippets, and source URLs. They label these as search results rather than verified facts: snippets can be stale, incomplete, or contradictory. PyBot does not infer an unsupported answer, verify page contents, or use an LLM to summarize them. Check the linked sources for confirmation, especially for current information.
 
@@ -125,7 +151,7 @@ For example, this is an **illustrative format**, not a live search result:
 Search results for "example query" (snippets, not independently verified): [1] Example title: An excerpt from the search result. Source: https://example.org/page
 ```
 
-The adapter lazily imports [`ddgs`](https://github.com/deedy5/ddgs), explicitly selects its `duckduckgo` backend, and requests at most three results with a five-second client timeout. That timeout is not a guaranteed deadline for the entire chatbot turn. The adapter adds no retry loop. Missing dependencies, timeouts, network failures, and empty results produce a short explanation instead of breaking the conversation. The library is unofficial and free to use without an API key; DuckDuckGo may throttle, block, or return no results, so successful retrieval is not guaranteed. Enabling search sends eligible query text to the search service.
+The adapter lazily imports [`ddgs`](https://github.com/deedy5/ddgs), explicitly selects its `duckduckgo` backend, and requests at most three results with a five-second client timeout. That timeout is not a guaranteed deadline for the entire chatbot turn. The adapter adds no retry loop. Missing dependencies, timeouts, network failures, and empty results produce a short explanation instead of breaking the conversation. The library is unofficial and free to use without an API key; DuckDuckGo may throttle, block, or return no results, so successful retrieval is not guaranteed. An empty response can mean there were no matches or that automated requests were blocked. PyBot-Web reports this uncertainty instead of inventing an answer. Enabling search sends eligible query text to the search service.
 
 ## Testing
 

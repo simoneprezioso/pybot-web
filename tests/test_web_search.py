@@ -16,6 +16,10 @@ class WebSearchRules(unittest.TestCase):
             "Who's Microsoft's current CEO?",
             "Can you tell me the current CEO of Microsoft?",
             "What happened in AI news today?",
+            "whats going on in AI today?",
+            "What's going on in AI today?",
+            "What's happening in robotics this week?",
+            "who is elon musk",
             "AI news today",
             "Please tell me AI news today",
             "What are current events?",
@@ -40,6 +44,9 @@ class WebSearchRules(unittest.TestCase):
             "What is a stock price?", "What is an exchange rate?",
             "What is the current through a resistor?", "What is the temperature in physics?",
             "How does weather affect plants today?", "How do I update Python?",
+            "What's going on with my garden today?",
+            "Who is at the door?", "Who is responsible for cleaning?",
+            "Who is Albert Einstein?",
             "The weather today is lovely.", "The news today is depressing.",
             "The latest Python version is broken.",
             "What is Microsoft's CEO responsible for?", "What does a current CEO do?",
@@ -68,6 +75,23 @@ class WebSearchRules(unittest.TestCase):
         for value in ("", "0", "false", "no", "off", "anything"):
             with self.subTest(value=value), mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": value}):
                 self.assertFalse(web_search.enabled())
+
+    def test_status_does_not_probe_package_when_disabled(self):
+        with mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": "0"}), \
+                mock.patch.object(web_search, "_package_available") as available:
+            self.assertIn("off", web_search.status_message())
+            available.assert_not_called()
+
+    def test_search_request_is_not_mistaken_for_a_capability_question(self):
+        with mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": "1"}), \
+                mock.patch.object(search, "search", return_value=search.SearchResponse()) as lookup:
+            reply = web_search.respond("Can you search the internet for Python releases?", {})
+            lookup.assert_called_once_with("Python releases?", max_results=3, timeout=5, timelimit=None)
+            self.assertIn("No useful search results", reply)
+
+    def test_public_person_mentioned_in_chat_keeps_local_recall(self):
+        memory = {"turns": [{"user": "My friend is Alex Smith.", "bot": "Noted."}]}
+        self.assertIsNone(web_search.query_for("Who is Alex Smith?", memory))
 
     def test_disabled_and_local_queries_never_call_transport(self):
         with mock.patch.object(search, "search") as lookup:

@@ -95,9 +95,12 @@ def pipe(runtime, args):
 
 def opening():
     """What the chat shows when it starts, and again after /reset."""
+    from bot.modules.web_search import status_message
+
     print(LOGO + "\n")
     print(TAGLINE)
     print(HINT + "\n")
+    print(status_message() + "\n")
 
 
 def clear_screen():

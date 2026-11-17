@@ -5,9 +5,12 @@ checks: the arbiter may ask them more than once. Priority stays below safety (90
 Search snippets are excerpts, never treated as independently verified facts.
 """
 import copy
+import importlib.util
 import os
 import random
 import re
+import sys
+from functools import lru_cache
 
 from .. import search as web
 from ..knowledge.maths import solve
@@ -50,6 +53,20 @@ _DEFINITION = re.compile(
     r"(?:what(?:'s| is| are)|define|explain)\s+(?:the\s+)?"
     r"(?:ceo|chief executive officer|president|news|weather|temperature|"
     r"forecast|stock price|exchange rate|inflation|population)[?.!]*$)", re.I)
+_EVENT_ASK = re.compile(
+    r"^what(?:'s|s| is| has)?\s+(?:going on|happening|happened|new)\b", re.I)
+_PERSON_ASK = re.compile(
+    r"^who(?:\s+is|'s|s)\s+([a-z][a-z'.-]*(?:\s+[a-z][a-z'.-]*){1,3})[?!.]*$", re.I)
+_NAME_STOP = frozenset((
+    "a an the at in on of for to by with responsible best good bad who what where "
+    "my our your his her their this that me you us them mother father brother sister "
+    "friend neighbour neighbor boss colleague partner husband wife".split()))
+_CAPABILITY = re.compile(
+    r"(?:(?:can|could|do|will) you (?:"
+    r"(?:web|internet) search|search(?: (?:the )?(?:web|internet|online|duckduckgo))?|"
+    r"browse(?: (?:the )?(?:web|internet))?|access (?:the )?(?:web|internet)|"
+    r"have (?:internet|web)(?: access)?)|"
+    r"is (?:web|internet) search (?:enabled|disabled|on|off))", re.I)
 
 
 def enabled():
@@ -57,13 +74,60 @@ def enabled():
     return os.environ.get("PYBOT_WEB_SEARCH", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _package_available():
+    try:
+        return importlib.util.find_spec("ddgs") is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def status_message():
+    """Describe configuration without importing ddgs or making a request."""
+    if not enabled():
+        return "Web search is off. Start with --web-search to enable it."
+    if sys.version_info < (3, 10):
+        return "Web search requires Python 3.10 or newer. Local replies are available."
+    if not _package_available():
+        return ('Web search is enabled, but ddgs is not installed. '
+                'Install it with python -m pip install ".[web]".')
+    return 'Web search is enabled (DuckDuckGo). Ask "search the web for ...".'
+
+
+def _capability_question(text):
+    if not isinstance(text, str):
+        return False
+    clean = " ".join(text.lower().split()).rstrip(" ?!.")
+    return _CAPABILITY.fullmatch(clean) is not None
+
+
+@lru_cache(maxsize=128)
+def _known_locally(clean):
+    from ..knowledge.lookup import find
+    return find({"clean": clean.lower()}) is not None
+
+
+def _person_lookup(asked, memory):
+    person = _PERSON_ASK.fullmatch(asked)
+    if not person:
+        return False
+    name = person.group(1).lower()
+    if _NAME_STOP.intersection(name.split()) or _known_locally(asked):
+        return False
+    # Names introduced in conversation belong to memory, not a public lookup.
+    for turn in (memory or {}).get("turns", ()):
+        previous = turn.get("user", "").lower()
+        if name in previous and not (_QUESTION.match(previous) or _EXPLICIT.match(previous)):
+            return False
+    return True
+
+
 def query_for(text, memory=None):
     """Return a natural-language query only for a deliberately narrow rule match.
 
-Stable definitions, personal questions and ordinary conversation stay local.
-Unsupported shapes can always be requested explicitly with 'search the web for'.
-The existing calculator also has date/conversion rules; keep those when they fit.
-"""
+    Stable definitions, personal questions and ordinary conversation stay local.
+    Unsupported shapes can be requested explicitly with 'search the web for'.
+    The existing calculator also has date/conversion rules; keep those when they fit.
+    """
     if not isinstance(text, str) or in_a_safety_thread(memory):
         return None
     clean = " ".join(text.replace("\u2019", "'").split()).strip()
@@ -94,8 +158,10 @@ The existing calculator also has date/conversion rules; keep those when they fit
                           r"^(?:why|how does|how do)\b", asked, re.I))
     market = bool(_MARKET.search(asked) and _PRICE.search(asked) and not _HISTORICAL.search(asked))
     changing = bool(fresh and _CHANGING.search(asked) and not _HISTORICAL.search(asked))
+    events = bool(fresh and _EVENT_ASK.match(asked))
+    person = _person_lookup(asked, memory)
     # Short topic requests ("AI news today", "weather in Rome") need no question mark.
-    if not (role or ((question or brief) and (news or weather or market or changing))):
+    if not (role or person or events or ((question or brief) and (news or weather or market or changing))):
         return None
     try:
         if solve(clean, {"clean": clean.lower()}, {}):
@@ -141,6 +207,10 @@ def _safety_has_answer(text, memory):
 
 
 def respond(text, memory):
+    if in_a_safety_thread(memory):
+        return None
+    if _capability_question(text):
+        return status_message()
     if not enabled():
         return None
     query = query_for(text, memory)
@@ -153,7 +223,8 @@ def respond(text, memory):
     if response.error:
         return "Web search unavailable " + label + ": " + response.error + " I can't verify current information."
     if not response.results:
-        return "No useful search results found " + label + ". Try a more specific query; I can't verify an answer."
+        return ("No useful search results found " + label + ". DuckDuckGo may have no matches "
+                "or may be blocking automated requests. Try again later or use a more specific query.")
     excerpts = []
     for number, result in enumerate(response.results[:3], 1):
         title = _excerpt(result.title, 140)
@@ -164,7 +235,9 @@ def respond(text, memory):
 
 
 def TAKES_AS_IT_COMES(text, memory=None):
-    return enabled() and query_for(text, memory) is not None
+    if in_a_safety_thread(memory):
+        return False
+    return _capability_question(text) or (enabled() and query_for(text, memory) is not None)
 
 
 def CLAIMS_INSTEAD(text, memory=None):

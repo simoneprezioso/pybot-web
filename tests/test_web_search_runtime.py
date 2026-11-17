@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 from bot import runtime, search
+from bot.modules import web_search
 
 
 class WebSearchRuntime(unittest.TestCase):
@@ -51,6 +52,85 @@ class WebSearchRuntime(unittest.TestCase):
         self.assertIn("https://example.net/ai-policy", result["reply"])
         self.search.assert_called_once()
 
+    def test_screenshot_ai_question_uses_current_search_results(self):
+        self.search.return_value = search.SearchResponse(results=(
+            search.SearchResult("AI news", "https://example.org/ai-today",
+                                "An AI research announcement was published today."),
+        ))
+        result = runtime.turn("whats going on in AI today?", {})
+
+        self.assertEqual(result["module"], "web_search")
+        self.assertIn("AI research announcement", result["reply"])
+        self.assertIn("https://example.org/ai-today", result["reply"])
+        self.search.assert_called_once()
+
+    def test_public_person_questions_search_regardless_of_capitalization(self):
+        self.search.return_value = search.SearchResponse(results=(
+            search.SearchResult("Elon Musk biography", "https://example.org/elon-musk",
+                                "Elon Musk is a businessperson."),
+        ))
+        for text in ("Who is Elon Musk?", "who is elon musk"):
+            with self.subTest(text=text):
+                self.search.reset_mock()
+                result = runtime.turn(text, {})
+                self.assertEqual(result["module"], "web_search")
+                self.assertIn("Elon Musk", result["reply"])
+                self.assertIn("https://example.org/elon-musk", result["reply"])
+                self.search.assert_called_once()
+
+    def test_capability_questions_report_configuration_without_searching(self):
+        questions = (
+            "can you web search?",
+            "can you search the web?",
+            "do you have internet access?",
+            "is web search enabled?",
+        )
+        for value, available, expected in (
+            ("0", True, "off|disabled"),
+            ("1", True, "enabled"),
+            ("1", False, "ddgs"),
+        ):
+            with mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": value}), \
+                    mock.patch.object(web_search, "_package_available", return_value=available):
+                for text in questions:
+                    with self.subTest(value=value, available=available, text=text):
+                        result = runtime.turn(text, {})
+                        self.assertEqual(result["module"], "web_search")
+                        self.assertRegex(result["reply"].lower(), expected)
+                        if value == "0":
+                            self.assertIn("--web-search", result["reply"])
+                        if value == "1" and not available:
+                            self.assertIn("install", result["reply"].lower())
+        self.search.assert_not_called()
+
+    def test_day_questions_keep_the_local_date_answer(self):
+        for text in ("what day is it today?", "what day is today?"):
+            with self.subTest(text=text):
+                result = runtime.turn(text, {})
+                self.assertNotEqual(result["module"], "web_search")
+                self.assertRegex(result["reply"],
+                                 r"Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday")
+        self.search.assert_not_called()
+
+    def test_known_historical_person_keeps_the_local_knowledge_answer(self):
+        for text in ("Who is Albert Einstein?", "who is einstein"):
+            with self.subTest(text=text):
+                result = runtime.turn(text, {})
+                self.assertEqual(result["module"], "answers")
+                self.assertIn("Einstein", result["reply"])
+                self.assertIn("relativity", result["reply"])
+        self.search.assert_not_called()
+
+    def test_previously_introduced_person_keeps_conversation_recall(self):
+        memory = {}
+        runtime.turn("My brother's name is Alex.", memory)
+        result = runtime.turn("Who is Alex?", memory)
+
+        self.assertEqual(result["module"], "memory_store")
+        self.assertIn("Alex", result["reply"])
+        self.assertIn("brother", result["reply"])
+        self.search.assert_not_called()
+
     def test_explicit_natural_language_search_uses_web_module(self):
         result = runtime.turn("Search the web for Microsoft leadership", {})
 
@@ -97,6 +177,9 @@ class WebSearchRuntime(unittest.TestCase):
             "The weather today is lovely.",
             "The news today is depressing.",
             "What is Microsoft's CEO responsible for?",
+            "who is my brother",
+            "who am i",
+            "who are you",
         )
         for text in questions:
             with self.subTest(text=text):
