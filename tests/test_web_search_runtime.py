@@ -103,6 +103,19 @@ class WebSearchRuntime(unittest.TestCase):
                             self.assertIn("install", result["reply"].lower())
         self.search.assert_not_called()
 
+    def test_sequential_capability_questions_keep_truthful_search_status(self):
+        for value, expected in (("0", "off|disabled"), ("1", "enabled")):
+            memory = {}
+            with self.subTest(value=value), \
+                    mock.patch.dict(os.environ, {"PYBOT_WEB_SEARCH": value}), \
+                    mock.patch.object(web_search, "_package_available", return_value=True):
+                for text in ("can you web search?", "do you have internet access?"):
+                    result = runtime.turn(text, memory)
+                    self.assertEqual(result["module"], "web_search")
+                    self.assertRegex(result["reply"].lower(), expected)
+                self.assertEqual(len(memory["turns"]), 2)
+        self.search.assert_not_called()
+
     def test_day_questions_keep_the_local_date_answer(self):
         for text in ("what day is it today?", "what day is today?"):
             with self.subTest(text=text):

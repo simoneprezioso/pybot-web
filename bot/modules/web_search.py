@@ -210,7 +210,9 @@ def respond(text, memory):
     if in_a_safety_thread(memory):
         return None
     if _capability_question(text):
-        return status_message()
+        # Different capability questions must not be mistaken for a repeated
+        # answer and replaced by an upstream "no internet" response.
+        return 'About "%s": %s' % (_excerpt(text, 160), status_message())
     if not enabled():
         return None
     query = query_for(text, memory)
