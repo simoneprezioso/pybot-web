@@ -11,6 +11,9 @@ requires-python = ">=3.8"
 license = {text = "Apache-2.0"}
 dependencies = []
 
+[project.optional-dependencies]
+web = ["ddgs>=9,<10; python_version >= '3.10'"]
+
 [project.urls]
 Repository = "https://github.com/huggingface/pybot"
 

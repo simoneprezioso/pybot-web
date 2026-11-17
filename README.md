@@ -1,34 +1,36 @@
-<p align="center"><img src="assets/banner.png" alt="PyBot: no weights, no training, just rules" width="100%"></p>
+# PyBot-Web
 
-<div align="center">
-  <a href="https://huggingface.co/spaces/HuggingFaceSwarms/PyBot" target="_blank">
-    <img alt="Hugging Face Space: PyBot demo" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Demo-ffc107?color=ffc107&logoColor=white" />
-  </a>
-</div>
+**A rule-based Python chatbot with optional DuckDuckGo web search.**
 
-# PyBot: can Python be a chatbot?
+PyBot-Web extends [Hugging Face's PyBot](https://github.com/huggingface/pybot) so it can look up current public information and include search snippets and source links in its replies. It keeps PyBot's original approach: Python rules, regular expressions, lookup tables, and conversation memory. No LLM inference, neural networks, model downloads, or model APIs are added.
 
-LLMs drive today’s chatbots and agents, but chatbots long predate them. Sixty years ago, [ELIZA](https://en.wikipedia.org/wiki/ELIZA) held conversations by matching patterns in what the user typed and answering with predefined templates. It could seem insightful, but its repertoire was narrow, and expanding it meant writing more rules by hand. How far could a rule-based chatbot go if a swarm of agents did that work instead?
+Web search is **off by default**. The bot still works locally without the optional search dependency or an internet connection.
 
-We challenged a swarm of over 1,000 agents to build a chatbot entirely in Python: no weights, no training, just if-else branches, regex patterns and lookup tables. The agents wrote and evaluated over 5,000 versions, and the chatbot’s win rate on [SmolTalkBench](https://huggingface.co/datasets/HuggingFaceSwarms/SmolTalkBench), where an LLM judge compares each reply with a reference answer, climbed from 0% to 26%. That puts it on par with SmolLM-360M-Instruct, which just a few years ago was state of the art for models under 1B parameters.
+## What's new
 
-![PyBot's win rate over the evaluated commits on a log scale: every commit as a dot and the best so far as a line, with three SmolLM baselines as dashed lines, and its lines of Python code in grey on the right axis](assets/progress.png)
+- **Optional internet access through `ddgs`.** Searches use the DuckDuckGo backend, with no API key required.
+- **Automatic search routing.** Rules recognize supported questions about current company leaders, news, weather, market prices, and software releases.
+- **Explicit searches.** Ask "search the web for ...", "search for ...", or "look up ..." to search other topics.
+- **Readable, attributed results.** Replies show up to three result titles, short snippets, and source URLs. Snippets are labeled as unverified excerpts.
+- **Graceful failures.** Missing dependencies, connection failures, timeouts, and empty results produce an explanation instead of breaking the conversation.
+- **Existing local responses.** Arithmetic, date calculations, cooking advice, greetings, and conversation recall stay with PyBot's existing modules. Emergency responses and ongoing safety threads stay local.
+- **CLI controls and mocked tests.** Enable search with `--web-search` or `PYBOT_WEB_SEARCH`; force it off with `--no-web-search`. Automated tests cover the adapter, routing, response pipeline, and CLI without making external search calls.
 
-The result is PyBot: around 640k lines of code that can answer everyday questions, backed by 550k lines of tests the agents wrote themselves.
+The original runtime and arbiter are unchanged. The Python module and command names remain `pybot` for compatibility.
 
-## Try it out
+## Quick start
 
-Try PyBot in your terminal below, or in the browser on [Hugging Face](https://huggingface.co/spaces/HuggingFaceSwarms/PyBot), where each reply shows which of PyBot’s modules produced it.
+Clone this fork and run it locally:
 
-PyBot needs Python 3.8 or newer and nothing else: no packages to install and no model to download.
+Offline PyBot needs Python 3.8 or newer and no third-party packages. Optional web search needs Python 3.10 or newer and the `ddgs` package. Neither mode downloads or runs a model.
 
 ```sh
-git clone https://github.com/huggingface/pybot
-cd pybot
+git clone https://github.com/simoneprezioso/pybot-web.git
+cd pybot-web
 python -m pybot
 ```
 
-That starts a chat in your terminal:
+That starts a chat in your terminal. The existing PyBot logo and `pybot` commands are retained for compatibility:
 
 ```text
     ____        ____        __
@@ -54,7 +56,7 @@ user: what's my name?
 pybot: You're Sam.
 ```
 
-Type `/reset` to clear the screen and start a new conversation, and `/exit` to quit. PyBot takes a few seconds to start, because Python has about 640,000 lines of code to load, and about a second to reply.
+Type `/reset` to clear the screen and start a new conversation, `/help` for commands, and `/exit` to quit. PyBot-Web takes a few seconds to load the original rule modules. Search requests add network latency when enabled.
 
 To ask one question and exit, or to pipe messages in and get one reply per line:
 
@@ -67,18 +69,85 @@ echo "how long should i boil an egg" | python -m pybot
 |---|---|
 | `-p TEXT`, `--prompt TEXT` | reply to this one message and exit |
 | `-i`, `--interactive` | with `-p`, keep chatting after the first reply |
-| `-s N`, `--seed N` | fix PyBot's choice of wording, to get the same replies again |
+| `-s N`, `--seed N` | seed local wording choices; live search results can still change |
 | `-v`, `--verbose` | after each reply, show the module that produced it and the time it took |
+| `--web-search` | enable optional DuckDuckGo search for this invocation |
+| `--no-web-search` | disable search even when `PYBOT_WEB_SEARCH` enables it |
 
 For a `pybot` command you can run from anywhere, install the clone with `pip install .`.
+
+## Optional internet search
+
+Search is off by default. Install the extra from this repository using Python 3.10 or newer:
+
+```sh
+python -m pip install ".[web]"
+python -m pybot --web-search -p "Who is the current CEO of Microsoft?"
+python -m pybot --web-search -p "What happened in AI news today?"
+python -m pybot --web-search -p "Search the web for Python release notes"
+```
+
+For an interactive chat with search enabled:
+
+```sh
+python -m pybot --web-search
+```
+
+Even with search enabled, `python -m pybot --web-search -p "What is 2 + 2?"` uses the existing local calculator and makes no search request.
+
+Installing `ddgs` directly (`python -m pip install "ddgs>=9,<10"`) also works. The offline package still supports Python 3.8 and 3.9; those versions do not install `ddgs` through the extra and cannot use web search.
+
+You can also enable search through the environment, including when using `python -m bot` or `bot.runtime.reply`:
+
+```sh
+export PYBOT_WEB_SEARCH=1
+python -m pybot
+```
+
+In PowerShell:
+
+```powershell
+$env:PYBOT_WEB_SEARCH = "1"
+python -m pybot
+```
+
+Use `--no-web-search` to override that environment setting for one invocation. With search disabled, no queries are sent and `ddgs` is not imported. The CLI flags apply only to the current invocation and restore the previous environment setting when `main()` returns.
+
+Accepted enabled environment values are `1`, `true`, `yes`, and `on`, ignoring case. Other values disable search.
+
+The search module uses deterministic rules to recognize public information that can change, such as company leaders, recent news, weather, and software releases. An explicit request such as "search the web for ..." also triggers search. Arithmetic ("What is 2 + 2?"), date calculations, ordinary cooking advice, greetings, and questions about the conversation keep their existing local responses. These rules deliberately cover a limited set of question forms; use an explicit web-search request for other topics.
+
+Responses present a short list of titles, excerpts from search snippets, and source URLs. They label these as search results rather than verified facts: snippets can be stale, incomplete, or contradictory. PyBot does not infer an unsupported answer, verify page contents, or use an LLM to summarize them. Check the linked sources for confirmation, especially for current information.
+
+For example, this is an **illustrative format**, not a live search result:
+
+```text
+Search results for "example query" (snippets, not independently verified): [1] Example title: An excerpt from the search result. Source: https://example.org/page
+```
+
+The adapter lazily imports [`ddgs`](https://github.com/deedy5/ddgs), explicitly selects its `duckduckgo` backend, and requests at most three results with a five-second client timeout. That timeout is not a guaranteed deadline for the entire chatbot turn. The adapter adds no retry loop. Missing dependencies, timeouts, network failures, and empty results produce a short explanation instead of breaking the conversation. The library is unofficial and free to use without an API key; DuckDuckGo may throttle, block, or return no results, so successful retrieval is not guaranteed. Enabling search sends eligible query text to the search service.
+
+## Testing
+
+Run the existing CLI tests and the new mocked search tests with:
+
+```sh
+python -m unittest discover -s tests
+```
+
+Automated search tests replace external calls and require neither internet access nor `ddgs`.
+
+Coverage includes current-information questions, explicit requests, local questions that must not search, missing dependencies, network failures, timeouts, empty results, source formatting, safety precedence, conversation memory, and CLI configuration.
 
 ## What is in this repository
 
 | Path | What it holds |
 |---|---|
-| `bot/` | PyBot itself: 528 Python files and about 640,000 lines, exactly as the swarm wrote them |
+| `bot/` | PyBot's original rule-based modules, plus the optional search adapter and module |
+| `bot/search.py` | optional `ddgs` adapter, result cleanup, and error handling |
+| `bot/modules/web_search.py` | rule-based search routing, safety checks, and excerpt formatting |
 | `pybot.py` | the command line shown above. It contains no chatbot logic |
-| `tests/` | tests for the command line: `python -m unittest discover -s tests` |
+| `tests/` | CLI, search adapter, and response-pipeline tests |
 | `assets/` | the banner and the chart |
 
 Every turn, each module in `bot/modules/` may propose a reply, and an arbiter (`bot/modules/arbiter.py`) picks the one you get. The modules build on four shared parts:
@@ -92,6 +161,14 @@ Every turn, each module in `bot/modules/` may propose a reply, and an arbiter (`
 
 The modules themselves are another 81,000 lines.
 
-## License
+### How search fits the existing architecture
+
+`bot/runtime.py` discovers modules automatically and runs four phases for each input. First, `observe(text, memory)` hooks update the shared understanding and memory. Then, `respond(text, memory)` hooks propose replies using separate memory copies. The arbiter selects a candidate, whose memory copy becomes the conversation's memory. Finally, `after(text, reply, memory)` hooks run and the runtime records the turn.
+
+`bot/modules/answers.py` already answers calculations and knowledge-base questions. The new `bot/modules/web_search.py` participates in the same proposal system and delegates external access to `bot/search.py`. Its narrow routing rules and existing arbiter claim hooks give eligible current-information questions a search response. The hooks only inspect the query and configuration; they never perform network requests. Its priority is below the existing safety band. Before network access, it also checks existing emergency rules on an isolated memory copy, preserving random state, so emergency replies do not wait for a search. Existing safety threads stay local. The runtime and arbiter require no changes, and all parsing, selection, and response formatting remain ordinary Python rules.
+
+## Credits and license
+
+The original rule-based chatbot was created by [Hugging Face's PyBot project](https://github.com/huggingface/pybot). This fork adds optional web search and its integration, configuration, documentation, and tests. The [upstream Hugging Face demo](https://huggingface.co/spaces/HuggingFaceSwarms/PyBot) demonstrates the original PyBot, not this fork's search feature.
 
 Apache License 2.0. See [LICENSE](LICENSE).

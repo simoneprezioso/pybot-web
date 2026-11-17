@@ -5,7 +5,7 @@
     python -m pybot -p "your message"        one reply, then exit
     echo "your message" | python -m pybot    one reply per input line
 
-PyBot itself is the `bot` package next to this file, exactly as the swarm of agents wrote it.
+PyBot itself is the `bot` package next to this file, with optional rule-based web search.
 This file only adds the command line. It holds no chatbot logic of its own.
 """
 import argparse
@@ -173,6 +173,11 @@ def main(argv=None):
                         help="seed for PyBot's choice of wording, to get the same replies again")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="after each reply, show the module that produced it and the time it took")
+    web = parser.add_mutually_exclusive_group()
+    web.add_argument("--web-search", dest="web_search", action="store_true", default=None,
+                     help="enable optional DuckDuckGo search (requires the web extra)")
+    web.add_argument("--no-web-search", dest="web_search", action="store_false",
+                     help="disable web search, overriding PYBOT_WEB_SEARCH")
     parser.add_argument("--version", action="version",
                         version="pybot %s (bot at commit %s)" % (__version__, SOURCE_COMMIT[:12]))
     args = parser.parse_args(argv)
@@ -182,14 +187,24 @@ def main(argv=None):
     interactive = (args.prompt is None and sys.stdin.isatty()) or (args.prompt is not None and args.interactive)
     if interactive:
         print("Loading PyBot...", end="", file=sys.stderr, flush=True)
-    runtime = load_bot()
-    if interactive:
-        print("\r" + " " * 16 + "\r", end="", file=sys.stderr, flush=True)
-        chat(runtime, args)
-    elif args.prompt is not None:
-        one_shot(runtime, args)
-    else:
-        pipe(runtime, args)
+    previous_web_search = os.environ.get("PYBOT_WEB_SEARCH")
+    if args.web_search is not None:
+        os.environ["PYBOT_WEB_SEARCH"] = "1" if args.web_search else "0"
+    try:
+        runtime = load_bot()
+        if interactive:
+            print("\r" + " " * 16 + "\r", end="", file=sys.stderr, flush=True)
+            chat(runtime, args)
+        elif args.prompt is not None:
+            one_shot(runtime, args)
+        else:
+            pipe(runtime, args)
+    finally:
+        if args.web_search is not None:
+            if previous_web_search is None:
+                os.environ.pop("PYBOT_WEB_SEARCH", None)
+            else:
+                os.environ["PYBOT_WEB_SEARCH"] = previous_web_search
     return 0
 
 
